@@ -1,0 +1,29 @@
+menu "WiFi Manager Configuration"
+
+    config CSI_WIFI_SSID
+        string "WiFi AP SSID"
+        default "CSI_SENSING_NET"
+        help
+            SSID of the Raspberry Pi access point.
+
+    config CSI_WIFI_PASSWORD
+        string "WiFi AP Password"
+        default "changeme123"
+        help
+            WPA2 password for the Raspberry Pi access point.
+
+    config CSI_WIFI_CHANNEL
+        int "WiFi channel"
+        range 1 13
+        default 6
+        help
+            WiFi channel. All nodes must use the same channel.
+
+    config CSI_WIFI_MAX_RETRY
+        int "Maximum WiFi reconnect attempts"
+        range 0 255
+        default 10
+        help
+            Number of reconnect attempts before giving up. 0 = infinite.
+
+endmenu

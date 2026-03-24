@@ -1,0 +1,19 @@
+model: resnet
+n_channels: 30
+n_classes: 7
+pretrained: true
+spec_h: 65
+spec_w: 32
+
+# Training
+lr: 1e-3
+epochs: 100
+batch_size: 32
+label_smoothing: 0.1
+weight_decay: 1e-4
+val_ratio: 0.2
+num_workers: 4
+
+# Paths
+data_dir: data/processed
+checkpoint_dir: checkpoints

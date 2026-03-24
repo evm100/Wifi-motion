@@ -1,0 +1,23 @@
+# hostapd.conf — WiFi AP for ESP32 CSI nodes.
+# Copy to /etc/hostapd/hostapd.conf and set real SSID/password.
+
+interface=wlan0
+driver=nl80211
+ssid=CSI_SENSING_AP
+hw_mode=g
+channel=6
+wmm_enabled=0
+
+# WPA2 authentication
+auth_algs=1
+wpa=2
+wpa_passphrase=CHANGE_ME_PLEASE
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+
+# Performance: disable power save to minimize CSI latency
+ieee80211n=1
+ht_capab=[HT20]
+
+# Max stations (3 RX + 1 TX)
+max_num_sta=10

@@ -1,0 +1,28 @@
+name: Protocol Compatibility
+
+on:
+  push:
+    paths:
+      - 'proto/**'
+  pull_request:
+    paths:
+      - 'proto/**'
+
+jobs:
+  protocol-compat:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pytest numpy
+
+      - name: Run protocol compatibility tests
+        working-directory: proto
+        run: python -m pytest test_protocol_compat.py -v

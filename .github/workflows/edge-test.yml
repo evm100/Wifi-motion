@@ -1,0 +1,35 @@
+name: Edge Tests
+
+on:
+  push:
+    paths:
+      - 'edge/**'
+      - 'proto/**'
+  pull_request:
+    paths:
+      - 'edge/**'
+      - 'proto/**'
+
+jobs:
+  edge-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create virtualenv and install deps
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -r edge/requirements.txt
+          pip install pytest
+
+      - name: Run edge tests
+        run: |
+          . .venv/bin/activate
+          PYTHONPATH="$PWD" python -m pytest edge/tests/ -v

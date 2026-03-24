@@ -1,0 +1,50 @@
+menu "CSI Node Configuration"
+
+    config CSI_NODE_ID
+        int "Node ID (unique per RX device)"
+        range 1 255
+        default 1
+        help
+            Unique identifier for this CSI receiver node.
+            TX node = 0, RX nodes = 1, 2, 3.
+
+    config CSI_TARGET_IP
+        string "Aggregator IP address"
+        default "192.168.4.1"
+        help
+            IP address of the Raspberry Pi aggregator.
+
+    config CSI_TARGET_PORT
+        int "Aggregator UDP port"
+        range 1024 65535
+        default 5005
+        help
+            UDP port the aggregator listens on.
+
+    config CSI_TX_MAC
+        string "TX node MAC address (AA:BB:CC:DD:EE:FF)"
+        default "FF:FF:FF:FF:FF:FF"
+        help
+            MAC address of the TX node to filter CSI frames.
+            Set to FF:FF:FF:FF:FF:FF to accept all frames.
+
+    config CSI_WIFI_SSID
+        string "WiFi AP SSID"
+        default "CSI_SENSING_NET"
+        help
+            SSID of the Raspberry Pi access point.
+
+    config CSI_WIFI_PASSWORD
+        string "WiFi AP Password"
+        default "changeme123"
+        help
+            WPA2 password for the Raspberry Pi access point.
+
+    config CSI_WIFI_CHANNEL
+        int "WiFi channel"
+        range 1 13
+        default 6
+        help
+            WiFi channel. Must match TX node and Pi AP.
+
+endmenu

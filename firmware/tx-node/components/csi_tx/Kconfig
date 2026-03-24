@@ -1,0 +1,12 @@
+menu "CSI TX Configuration"
+
+    config CSI_TX_RATE_HZ
+        int "TX frame injection rate (Hz)"
+        range 10 500
+        default 100
+        help
+            Rate at which ESP-NOW broadcast frames are sent.
+            100 Hz is standard for motion detection.
+            200 Hz for gesture recognition.
+
+endmenu

@@ -1,0 +1,44 @@
+# pipeline.yaml — DSP pipeline configuration for Raspberry Pi edge node.
+# All parameters documented with units and rationale.
+
+# CSI sampling rate set by TX node ESP-NOW injection rate
+csi_sampling_rate_hz: 100.0
+
+# Number of valid subcarriers (52 LLTF + 56 HT-LTF)
+n_valid_subcarriers: 108
+
+# --- Hampel outlier filter ---
+hampel:
+  enabled: true              # Disable in clean RF environments for faster detection
+  window_size: 5             # Half-window: total window = 2*5+1 = 11 samples
+  n_sigma: 3.0               # MAD-scaled threshold; 3.0 is standard
+
+# --- Butterworth low-pass filter ---
+butterworth:
+  cutoff_hz: 10.0            # Hz — covers all human activities (breathing to gestures)
+  order: 4                   # Filter order; 4 gives -80 dB/decade rolloff
+  # Alternative cutoffs:
+  #   5.0  — motion detection only (walking, presence)
+  #   0.8  — vital signs / breathing isolation
+  #   15.0 — gesture recognition (preserves rapid hand movements)
+
+# --- Adaptive baseline subtraction ---
+baseline:
+  fast_alpha: 0.1            # EMA alpha during calibration (fast convergence)
+  slow_alpha: 0.001          # EMA alpha during operation (tracks drift)
+  calibration_samples: 300   # Empty-room samples before switching to slow mode
+  # At 100 Hz, 300 samples = 3 seconds of calibration
+
+# --- PCA dimensionality reduction ---
+pca:
+  n_components: 20           # Output dimensions (from 324 = 3 nodes × 108 sc)
+  calibration_size: 500      # Samples to collect before fitting PCA
+  # Typically PC1-5 capture >95% variance; 20 gives headroom
+
+# --- Feature extraction ---
+feature_extraction:
+  window_size: 256           # Samples per feature window (2.56 sec @ 100 Hz)
+  hop_size: 50               # Stride between windows (0.5 sec, 80% overlap)
+  # Spectrogram parameters (used inside feature_extractor)
+  spectrogram_nperseg: 128   # STFT segment length (1.28 sec time resolution)
+  spectrogram_noverlap: 120  # STFT overlap (93.75% for smooth output)

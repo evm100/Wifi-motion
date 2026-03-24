@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Type checking / linting caches
+.mypy_cache/
+.ruff_cache/
+
+# ESP-IDF firmware build artifacts
+firmware/*/build/
+firmware/*/sdkconfig
+firmware/*/sdkconfig.old
+firmware/*/dependencies.lock
+firmware/*/managed_components/
+
+# C/C++ compiled objects (proto/ compat tests)
+*.o
+*.so
+*.a
+*.out
+
+# GPU data and checkpoints
+gpu/data/raw/
+gpu/data/processed/
+gpu/checkpoints/*.pt
+gpu/checkpoints/*.pth
+gpu/checkpoints/*.onnx
+
+# ML experiment tracking
+wandb/
+runs/
+tb_logs/
+
+# Serialized data / large binary files
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+
+# Collected data sessions
+data/
+*.pcap
+
+# Config secrets (keep .example files)
+edge/config/hostapd.conf
+*.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Core dumps
+core
+core.*

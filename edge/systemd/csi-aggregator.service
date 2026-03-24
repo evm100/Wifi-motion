@@ -1,0 +1,32 @@
+[Unit]
+Description=CSI Sensing Edge Pipeline — UDP aggregator + DSP + GPU forwarder
+After=network.target hostapd.service dnsmasq.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/wifi-csi-sensing
+Environment=PYTHONPATH=/home/pi/wifi-csi-sensing
+ExecStart=/home/pi/wifi-csi-sensing/.venv/bin/python -m edge.aggregator \
+    --config /home/pi/wifi-csi-sensing/edge/config/pipeline.yaml \
+    --log-level INFO
+
+# Performance tuning: pin to cores 2-3 (leave 0-1 for OS and hostapd)
+CPUAffinity=2 3
+Nice=-5
+
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=csi-aggregator
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/pi/wifi-csi-sensing
+
+[Install]
+WantedBy=multi-user.target

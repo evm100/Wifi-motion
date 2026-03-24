@@ -1,0 +1,18 @@
+model: domain_adaptive
+n_channels: 30
+n_classes: 7
+n_domains: 3
+lambda_domain: 0.5
+
+# Training
+lr: 1e-3
+epochs: 50
+batch_size: 32
+label_smoothing: 0.1
+weight_decay: 1e-4
+num_workers: 4
+
+# Paths
+source_data_dir: data/source
+target_data_dir: data/target
+checkpoint_dir: checkpoints
