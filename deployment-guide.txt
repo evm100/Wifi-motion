@@ -1,0 +1,222 @@
+  Deployment Guide: WiFi CSI Sensing Pipeline
+
+  Overview of the workflow
+
+  1. Set up Pi as WiFi AP  →  2. Flash ESP32s  →  3. Start edge pipeline  →  4. Collect data  →  5. Train model  →  6. Run inference
+
+  ---
+  Step 1: Set Up the Raspberry Pi as WiFi AP
+
+  On the Pi, clone the repo and run setup:
+
+  cd ~/wifi-csi-sensing    # or wherever you clone to
+  sudo bash edge/setup.sh
+
+  This installs hostapd, dnsmasq, Python deps, and the systemd service. Then:
+
+  a) Edit the AP credentials:
+  sudo nano /etc/hostapd/hostapd.conf
+  Change ssid=CSI_SENSING_AP and wpa_passphrase=CHANGE_ME_PLEASE to your chosen values. Keep channel=6.
+
+  b) Set a static IP on wlan0 (192.168.4.1/24). On Pi OS, edit /etc/dhcpcd.conf:
+  interface wlan0
+  static ip_address=192.168.4.1/24
+  nohook wpa_supplicant
+
+  c) Start the AP:
+  sudo systemctl start hostapd dnsmasq
+
+  Verify the AP is broadcasting with your phone or laptop.
+
+  ---
+  Step 2: Configure and Flash the ESP32-S3 Firmware
+
+  You need your ESP-IDF environment active (esp alias or source export.sh).
+
+  2a. Set WiFi credentials to match the Pi AP
+
+  On your dev machine, configure both firmware projects via idf.py menuconfig:
+
+  TX node:
+  cd firmware/tx-node
+  idf.py menuconfig
+  Navigate to WiFi Manager Configuration and set:
+  - WiFi AP SSID → same as hostapd.conf
+  - WiFi AP Password → same as hostapd.conf
+  - WiFi channel → 6
+
+  Optionally adjust the TX rate under CSI TX Configuration (default 100 Hz is fine).
+
+  RX node (repeat for each node, changing the node ID):
+  cd firmware/rx-node
+  idf.py menuconfig
+  Navigate to CSI Node Configuration and set:
+  - Node ID → 1 for the first RX board, 2 for second, 3 for third
+  - WiFi AP SSID / Password → same as Pi AP
+  - TX node MAC address → the MAC of your TX ESP32 (find it in the TX serial monitor output at boot, or use FF:FF:FF:FF:FF:FF to
+  accept all)
+  - Aggregator IP → 192.168.4.1 (default)
+  - Aggregator UDP port → 5005 (default)
+
+  2b. Build both firmwares
+
+  # From repo root
+  make build-tx
+  make build-rx
+
+  2c. Flash all boards
+
+  Plug in all 4 ESP32-S3 boards. Identify which serial port is which (ls /dev/ttyUSB* or /dev/ttyACM*).
+
+  Important: For the RX nodes, you must flash each one separately with its unique CSI_NODE_ID. After menuconfig for node 1, flash it,
+   then change CSI_NODE_ID to 2, rebuild, flash the next, etc.
+
+  # Flash TX node
+  make flash-tx PORT=/dev/ttyUSB0
+
+  # Flash RX nodes (after setting each node ID in menuconfig + rebuild)
+  make flash-rx PORT=/dev/ttyUSB1   # node_id=1
+  make flash-rx PORT=/dev/ttyUSB2   # node_id=2
+  make flash-rx PORT=/dev/ttyUSB3   # node_id=3
+
+  Or use the batch tool (but only after building each RX with the right node ID):
+  ./tools/flash_all.sh /dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyUSB3
+
+  2d. Verify
+
+  Open a serial monitor on any RX node (idf.py -p /dev/ttyUSBx monitor). You should see:
+  - WiFi connected to the Pi AP
+  - CSI packets being received and sent via UDP
+  - Stats logged every 5 seconds (packet rate, RSSI, heap)
+
+  ---
+  Step 3: Start the Edge Pipeline on the Pi
+
+  # Start the aggregator service
+  sudo systemctl start csi-aggregator
+
+  # Watch the logs
+  sudo journalctl -u csi-aggregator -f
+
+  Or run it manually for debugging:
+  cd ~/wifi-csi-sensing
+  PYTHONPATH=. .venv/bin/python -m edge.aggregator --config edge/config/pipeline.yaml --log-level DEBUG
+
+  You'll see:
+  1. Calibration phase (~8 seconds): the room should be empty while baseline + PCA calibrate (300 baseline samples + 500 PCA samples
+  at 100 Hz)
+  2. "Calibration complete" log message with PCA variance explained
+  3. Streaming mode: processed tensors forwarded over ZMQ to the GPU server
+
+  ---
+  Step 4: Collect Labeled Training Data
+
+  Run the data collection tool on the Pi (or any machine receiving the UDP packets):
+
+  PYTHONPATH=. .venv/bin/python tools/collect_data.py \
+      --output-dir data/sessions \
+      --activities empty,walking,sitting,standing,falling,gesture,breathing \
+      --duration-per-activity 30 \
+      --repetitions 3
+
+  This gives you an interactive session:
+  - Press Enter when ready for each activity
+  - 5-second countdown, then 30 seconds of recording
+  - Raw binary packets saved with JSON metadata sidecars
+
+  Recommended collection strategy:
+  - Start with the room empty for each session
+  - 3+ repetitions per activity, in different locations in the room
+  - Multiple sessions on different days for domain diversity
+  - Each session generates data/sessions/session_YYYYMMDD_HHMMSS_summary.json
+
+  ---
+  Step 5: Train a Model on the GPU Server
+
+  5a. Preprocess the raw captures into spectrograms
+
+  You'll need to convert the raw .bin capture files into processed spectrograms. The training code expects data in
+  gpu/data/processed/ with .npz files.
+
+  5b. Copy data to the GPU server
+
+  scp -r data/sessions/ gpu-server:~/wifi-csi-sensing/gpu/data/
+
+  5c. Train with Docker
+
+  On the GPU server:
+  cd gpu/
+
+  # Build the container
+  docker compose build
+
+  # Start training (ResNet18 by default)
+  docker compose --profile training up
+
+  This runs train.py with configs/train_resnet.yaml:
+  - ResNet18, 30 input channels (3 nodes x 10 PCs), 7 activity classes
+  - 100 epochs, lr=1e-3, batch_size=32
+  - Best model saved to checkpoints/best_resnet.pt
+
+  For other architectures, edit the compose command or use:
+  docker compose --profile training run training \
+      python3 training/train.py --config configs/train_transformer.yaml
+
+  ---
+  Step 6: Run Real-Time Inference
+
+  On the GPU server, with a trained checkpoint in gpu/checkpoints/:
+
+  cd gpu/
+  docker compose up -d
+
+  This starts the inference server which:
+  - Subscribes to the Pi's ZMQ stream at tcp://192.168.4.1:5556
+  - Runs each received tensor through the model on GPU
+  - Logs classification results and latency
+
+  Check it with:
+  docker compose logs -f
+
+  ---
+  Quick Reference (Makefile targets)
+
+  ┌───────────────────────────────────┬────────────────────────┐
+  │              Command              │      What it does      │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make build-tx                     │ Build TX firmware      │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make build-rx                     │ Build RX firmware      │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make flash-tx PORT=/dev/ttyUSBx   │ Flash + monitor TX     │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make flash-rx PORT=/dev/ttyUSBx   │ Flash + monitor RX     │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make pi-setup                     │ Run Pi setup script    │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make pi-start / pi-stop / pi-logs │ Manage edge service    │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make collect                      │ Start data collection  │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make visualize                    │ Launch CSI visualizer  │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make gpu-train                    │ Train a model          │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make gpu-infer                    │ Start inference daemon │
+  ├───────────────────────────────────┼────────────────────────┤
+  │ make test                         │ Run all tests          │
+  └───────────────────────────────────┴────────────────────────┘
+
+  ---
+  Key things to watch out for
+
+  1. Calibration requires an empty room — the first ~8s after starting the pipeline must be motion-free for baseline/PCA to converge
+  2. TX MAC address — either set the real TX MAC in each RX node's Kconfig, or leave as FF:FF:FF:FF:FF:FF to accept all (noisier but
+  works for initial testing)
+  3. Node IDs must be unique — each RX board needs a different CSI_NODE_ID (1, 2, 3), which requires a separate menuconfig + build
+  cycle per board
+  4. Channel must match everywhere — Pi hostapd, TX node, and all RX nodes must all be on channel 6
+  5. The systemd service paths assume /home/pi/wifi-csi-sensing — edit edge/systemd/csi-aggregator.service if your Pi user or repo
+  path differs
+  6. GPU ZMQ address — the inference container connects to tcp://192.168.4.1:5556, update in docker-compose.yml if your Pi's Ethernet
+   IP is different
