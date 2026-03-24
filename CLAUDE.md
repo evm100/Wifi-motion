@@ -4,6 +4,16 @@
 
 Multi-node WiFi CSI sensing system for device-free human motion and presence detection. The system uses 802.11 Channel State Information captured by ESP32-S3 microcontrollers, preprocessed on a Raspberry Pi, and classified by deep learning on an RTX 4080 GPU server.
 
+## Reference Documents
+
+Detailed implementation code, algorithms, and research citations are in:
+- `module1_rf_physics_csi.md` — RF propagation, CSI math, subcarrier layout, Fresnel zones
+- `module2_edge_hardware_topology.md` — ESP32-S3 N16R8 constraints, CFO/SFO, network topology, time sync, UDP streaming, full firmware code
+- `module3_dsp_feature_extraction.md` — Phase sanitization, Hampel/Butterworth filters, PCA, feature extraction, full Python pipeline code
+- `module4_deep_learning_domain_adaptation.md` — Model architectures (ResNet, CNN-GRU, Transformer), multi-node fusion, domain adaptation, BVP, training pipeline
+
+Read the relevant module file before implementing each phase. They contain working code to use as reference, not just descriptions.
+
 ## Hardware
 
 - **4× ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, dual-core LX7 @ 240 MHz)
