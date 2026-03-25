@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSI Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --muted: #8b8fa3;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --amber: #f59e0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    background: var(--bg); color: var(--text);
+    padding: 20px; max-width: 1100px; margin: 0 auto;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+  h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--muted); font-weight: 500; }
+
+  /* Node cards */
+  .nodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .node-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .node-name { font-weight: 600; font-size: 1rem; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .status-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.off { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .node-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 0.85rem; }
+  .stat-label { color: var(--muted); }
+  .stat-value { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Collection panel */
+  .collect-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; margin-bottom: 28px;
+  }
+  .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: end; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 0.8rem; color: var(--muted); }
+  .form-group input, .form-group textarea {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 8px 10px; font-size: 0.9rem; font-family: inherit;
+  }
+  .form-group textarea { resize: vertical; min-height: 36px; }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--blue); }
+  button {
+    padding: 8px 20px; border: none; border-radius: 6px; font-size: 0.9rem;
+    cursor: pointer; font-weight: 500; transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--green); color: #000; }
+  .btn-stop { background: var(--red); color: #fff; }
+  .btn-skip { background: var(--amber); color: #000; }
+
+  /* Active session status */
+  .session-status {
+    margin-top: 16px; padding: 14px; background: var(--bg);
+    border-radius: 8px; font-size: 0.9rem; display: none;
+  }
+  .session-status.active { display: block; }
+  .progress-bar {
+    height: 6px; background: var(--border); border-radius: 3px;
+    margin-top: 10px; overflow: hidden;
+  }
+  .progress-fill { height: 100%; background: var(--blue); border-radius: 3px; transition: width 0.4s; }
+
+  /* Session history */
+  .sessions-table {
+    width: 100%; border-collapse: collapse; font-size: 0.85rem;
+  }
+  .sessions-table th {
+    text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+    color: var(--muted); font-weight: 500;
+  }
+  .sessions-table td {
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+  }
+
+  /* Connection indicator */
+  .ws-status { font-size: 0.75rem; color: var(--muted); float: right; }
+  .ws-status.connected { color: var(--green); }
+</style>
+</head>
+<body>
+
+<div style="display:flex; justify-content:space-between; align-items:baseline;">
+  <div>
+    <h1>CSI Dashboard</h1>
+    <p class="subtitle">ESP32 Node Monitor & Data Collection</p>
+  </div>
+  <span id="wsStatus" class="ws-status">disconnected</span>
+</div>
+
+<!-- Node Status -->
+<h2>Nodes</h2>
+<div id="nodes" class="nodes">
+  <div class="node-card"><span class="stat-label">Waiting for data...</span></div>
+</div>
+
+<!-- Data Collection -->
+<h2>Data Collection</h2>
+<div class="collect-panel">
+  <div class="form-row">
+    <div class="form-group" style="flex:2">
+      <label>Activities (comma-separated)</label>
+      <input id="activities" type="text" value="empty, walking, sitting, standing, falling, gesture, breathing">
+    </div>
+    <div class="form-group">
+      <label>Duration (s)</label>
+      <input id="duration" type="number" value="30" min="1" style="width:80px">
+    </div>
+    <div class="form-group">
+      <label>Reps</label>
+      <input id="reps" type="number" value="1" min="1" style="width:60px">
+    </div>
+    <div class="form-group">
+      <label>Countdown (s)</label>
+      <input id="countdown" type="number" value="5" min="0" style="width:80px">
+    </div>
+  </div>
+  <div class="form-row">
+    <button id="btnStart" class="btn-start" onclick="startSession()">Start Session</button>
+    <button id="btnSkip" class="btn-skip" onclick="skipCapture()" disabled>Skip</button>
+    <button id="btnStop" class="btn-stop" onclick="stopSession()" disabled>Stop</button>
+  </div>
+
+  <div id="sessionStatus" class="session-status">
+    <div id="sessionText"></div>
+    <div class="progress-bar"><div id="progressFill" class="progress-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- Session History -->
+<h2>Past Sessions</h2>
+<table class="sessions-table" id="sessionsTable">
+  <thead><tr><th>Session</th><th>Captures</th><th>Packets</th></tr></thead>
+  <tbody id="sessionsBody"></tbody>
+</table>
+
+<script>
+const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+let ws;
+
+function connectWs() {
+  ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+  const el = document.getElementById('wsStatus');
+
+  ws.onopen = () => { el.textContent = 'live'; el.className = 'ws-status connected'; };
+  ws.onclose = () => {
+    el.textContent = 'disconnected'; el.className = 'ws-status';
+    setTimeout(connectWs, 2000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    renderNodes(msg.nodes);
+    renderCollection(msg.collection);
+  };
+}
+
+function renderNodes(nodes) {
+  const container = document.getElementById('nodes');
+  container.innerHTML = nodes.map(n => `
+    <div class="node-card">
+      <div class="node-header">
+        <span class="node-name">Node ${n.node_id}</span>
+        <span class="status-dot ${n.connected ? 'on' : 'off'}"></span>
+      </div>
+      <div class="node-stats">
+        <span class="stat-label">Status</span>
+        <span class="stat-value">${n.connected ? 'Connected' : 'Disconnected'}</span>
+        <span class="stat-label">Packet Rate</span>
+        <span class="stat-value">${n.packets_per_sec} pkt/s</span>
+        <span class="stat-label">RSSI</span>
+        <span class="stat-value">${n.connected ? n.rssi + ' dBm' : '—'}</span>
+        <span class="stat-label">Noise Floor</span>
+        <span class="stat-value">${n.connected ? n.noise_floor + ' dBm' : '—'}</span>
+        <span class="stat-label">Channel</span>
+        <span class="stat-value">${n.connected ? n.channel : '—'}</span>
+        <span class="stat-label">Total Packets</span>
+        <span class="stat-value">${n.packets_total.toLocaleString()}</span>
+        <span class="stat-label">Seq #</span>
+        <span class="stat-value">${n.connected ? n.seq_num : '—'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderCollection(c) {
+  const btnStart = document.getElementById('btnStart');
+  const btnSkip = document.getElementById('btnSkip');
+  const btnStop = document.getElementById('btnStop');
+  const panel = document.getElementById('sessionStatus');
+  const text = document.getElementById('sessionText');
+  const fill = document.getElementById('progressFill');
+
+  const idle = c.state === 'idle';
+  btnStart.disabled = !idle;
+  btnSkip.disabled = idle;
+  btnStop.disabled = idle;
+  document.getElementById('activities').disabled = !idle;
+  document.getElementById('duration').disabled = !idle;
+  document.getElementById('reps').disabled = !idle;
+  document.getElementById('countdown').disabled = !idle;
+
+  if (idle) {
+    panel.className = 'session-status';
+    return;
+  }
+
+  panel.className = 'session-status active';
+
+  if (c.state === 'countdown') {
+    text.innerHTML = `<strong>Get ready:</strong> ${c.next_activity} (rep ${c.next_repetition}) &mdash; starting in ${c.countdown_remaining}s`
+      + `<br><span style="color:var(--muted)">Captures done: ${c.captures_done} | Remaining: ${c.queue_remaining}</span>`;
+    fill.style.width = '0%';
+  } else if (c.state === 'recording') {
+    const pct = Math.min(100, (c.elapsed / c.duration) * 100);
+    text.innerHTML = `<strong>Recording:</strong> ${c.activity} (rep ${c.repetition}) &mdash; ${c.elapsed.toFixed(1)}s / ${c.duration}s`
+      + `<br><span style="color:var(--muted)">${c.packet_count} packets from nodes [${c.node_ids.join(', ')}] | Remaining: ${c.queue_remaining}</span>`;
+    fill.style.width = pct + '%';
+  }
+}
+
+async function startSession() {
+  const acts = document.getElementById('activities').value.split(',').map(s => s.trim()).filter(Boolean);
+  const body = {
+    activities: acts,
+    duration: parseFloat(document.getElementById('duration').value),
+    repetitions: parseInt(document.getElementById('reps').value),
+    countdown: parseFloat(document.getElementById('countdown').value),
+  };
+  await fetch('/api/collect/start', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+  });
+}
+
+async function stopSession() {
+  await fetch('/api/collect/stop', { method: 'POST' });
+  loadSessions();
+}
+
+async function skipCapture() {
+  await fetch('/api/collect/skip', { method: 'POST' });
+}
+
+async function loadSessions() {
+  const res = await fetch('/api/sessions');
+  const sessions = await res.json();
+  const tbody = document.getElementById('sessionsBody');
+  tbody.innerHTML = sessions.map(s => `
+    <tr>
+      <td>${s.session_id}</td>
+      <td>${s.total_captures}</td>
+      <td>${s.total_packets.toLocaleString()}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="color:var(--muted)">No sessions yet</td></tr>';
+}
+
+connectWs();
+loadSessions();
+</script>
+</body>
+</html>
