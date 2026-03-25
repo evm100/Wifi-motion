@@ -33,7 +33,7 @@ void app_main(void)
     /* Create default event loop */
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    /* Start WiFi as STA, connect to Pi AP */
+    /* Start WiFi as STA, connect to hotspot */
     ret = wifi_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "WiFi manager init failed: %s", esp_err_to_name(ret));
@@ -47,7 +47,7 @@ void app_main(void)
         return;
     }
 
-    /* Sync time via SNTP to Pi */
+    /* Sync time via SNTP */
     ret = time_sync_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Time sync init failed: %s (continuing anyway)", esp_err_to_name(ret));

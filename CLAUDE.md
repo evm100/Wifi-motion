@@ -21,24 +21,28 @@ They contain working, tested code to use directly — not pseudocode.
 - Each board has a **2 dBi external stick dipole antenna** (IPEX/U.FL connector)
 - **1 board is the TX node** (ESP-NOW broadcast frame injector)
 - **3 boards are RX nodes** (promiscuous-mode CSI capture + UDP streaming)
-- **1× Raspberry Pi 5** as edge aggregator (WiFi AP for ESP32 mesh + Ethernet to GPU)
+- **1× Raspberry Pi 5** as edge aggregator (joins iPhone hotspot + Ethernet to GPU)
 - **1× RTX 4080 server** for training and real-time inference
 
 ## Architecture
 
 ```
-[TX ESP32-S3] ──ESP-NOW broadcast @ 100Hz──▶ air
-                                              │
-                    ┌─────────────────────────┤
-                    │           │             │
-              [RX Node 1] [RX Node 2] [RX Node 3]
-              (promiscuous CSI capture, UDP to Pi)
-                    │           │             │
-                    └─────────┬───────────────┘
-                              │ UDP :5005 (binary packets)
-                              ▼
+                        [iPhone Hotspot]
+                     (WiFi AP, 172.20.10.x/28)
+                    ┌──────────┼──────────────────────┐
+                    │          │                       │
+[TX ESP32-S3] ─ESP-NOW 100Hz─▶ air                    │
+                    │          │                       │
+              ┌─────┤          │                       │
+              │     │          │                       │
+        [RX Node 1] [RX Node 2] [RX Node 3]  [Raspberry Pi]
+        (promiscuous CSI capture, UDP to Pi)   (STA on hotspot)
+              │           │             │             ▲
+              └───────────┴─────────────┘             │
+                              │ UDP :5005 (binary)    │
+                              └───────────────────────┘
                     [Raspberry Pi]
-                    - WiFi AP (hostapd, 192.168.4.1, channel 6)
+                    - WiFi STA on iPhone hotspot
                     - UDP ingestion + packet alignment by TX seq num
                     - DSP: phase sanitization, Hampel, Butterworth, PCA
                     - Feature extraction: Doppler spectrograms
@@ -241,8 +245,8 @@ Total packet size for HT20 with LLTF+HT-LTF: 20 + 256 = 276 bytes.
 - sdkconfig: `CONFIG_SPIRAM=y`, `CONFIG_SPIRAM_MODE_OCT=y`, `CONFIG_SPIRAM_SPEED_80M=y`
 
 ### WiFi & CSI configuration
-- WiFi channel: 6 (configurable via Kconfig)
-- All nodes connect as STA to Pi's AP (SSID/password via Kconfig or NVS)
+- WiFi channel: auto (determined by iPhone hotspot; ESP32 uses channel 0 = auto-scan)
+- All nodes connect as STA to iPhone hotspot (SSID/password via Kconfig or NVS)
 - TX node: ESP-NOW broadcast at configurable rate (default 100 Hz)
 - RX nodes: promiscuous mode, CSI callback filters by TX MAC address
 - CSI config: `lltf_en=true`, `htltf_en=true`, `stbc_htltf2_en=false`
@@ -251,24 +255,24 @@ Total packet size for HT20 with LLTF+HT-LTF: 20 + 256 = 276 bytes.
 ### Kconfig parameters (rx-node)
 ```
 CONFIG_CSI_NODE_ID       (uint8, 1-255, default 1)
-CONFIG_CSI_TARGET_IP     (string, default "192.168.4.1")
+CONFIG_CSI_TARGET_IP     (string, default "172.20.10.2")
 CONFIG_CSI_TARGET_PORT   (uint16, default 5005)
 CONFIG_CSI_TX_RATE_HZ    (uint16, default 100)     # TX node only
 CONFIG_CSI_WIFI_SSID     (string)
 CONFIG_CSI_WIFI_PASSWORD (string)
-CONFIG_CSI_WIFI_CHANNEL  (uint8, default 6)
+CONFIG_CSI_WIFI_CHANNEL  (uint8, default 0)        # 0 = auto-scan
 CONFIG_CSI_TX_MAC        (string, "AA:BB:CC:DD:EE:FF")  # RX nodes filter by this
 ```
 
 ### TX node behavior
-1. Connect to Pi AP as STA
+1. Connect to iPhone hotspot as STA
 2. Init ESP-NOW, add broadcast peer (FF:FF:FF:FF:FF:FF)
-3. SNTP sync to Pi
+3. SNTP sync via public NTP server
 4. Loop: send ESP-NOW broadcast with incrementing seq_num in payload at fixed interval
 5. Precise timing via `vTaskDelayUntil`, not `vTaskDelay`
 
 ### RX node behavior
-1. Connect to Pi AP as STA
+1. Connect to iPhone hotspot as STA
 2. Enable promiscuous mode
 3. Configure CSI (LLTF + HT-LTF)
 4. Register CSI callback (IRAM_ATTR)
@@ -282,7 +286,7 @@ CONFIG_CSI_TX_MAC        (string, "AA:BB:CC:DD:EE:FF")  # RX nodes filter by thi
 - Python 3.11+ in a virtualenv
 - numpy, scipy, scikit-learn, pyzmq, PyYAML
 - systemd for service management
-- hostapd + dnsmasq for WiFi AP
+- Connects to iPhone hotspot as WiFi STA (no AP mode)
 
 ### Pipeline flow (per aligned frame group at ~100 Hz)
 1. **UDP receive** — async UDP socket on :5005, parse binary packets
@@ -307,7 +311,7 @@ Complex CSI: `real + j * imaginary`.
 ### Configuration files
 - `pipeline.yaml`: DSP parameters (cutoff frequencies, PCA components, window sizes)
 - `network.yaml`: IPs, ports, node count, GPU server address
-- `hostapd.conf.example`: template (real one is gitignored — contains password)
+- `hostapd.conf.example`: reference only (not used — iPhone hotspot is the AP)
 
 ## GPU Server Code
 
@@ -340,7 +344,7 @@ Complex CSI: `real + j * imaginary`.
 ```
 WiFi:
   wavelength: 0.125 m (2.4 GHz)
-  channel: 6 (center freq 2437 MHz)
+  channel: auto (iPhone hotspot picks channel; typically 2.4 GHz band)
   bandwidth: 20 MHz (HT20)
   subcarrier_spacing: 312.5 kHz
   n_valid_subcarriers: 108 (52 LLTF + 56 HT-LTF)

@@ -1,5 +1,5 @@
 /**
- * wifi_manager.c — STA connection to configurable AP with auto-reconnect.
+ * wifi_manager.c — STA connection to WiFi hotspot with auto-reconnect.
  */
 
 #include "wifi_manager.h"

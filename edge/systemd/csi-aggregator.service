@@ -1,7 +1,7 @@
 [Unit]
 Description=CSI Sensing Edge Pipeline — UDP aggregator + DSP + GPU forwarder
-After=network.target hostapd.service dnsmasq.service
-Wants=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -13,7 +13,7 @@ ExecStart=/home/pi/wifi-csi-sensing/.venv/bin/python -m edge.aggregator \
     --config /home/pi/wifi-csi-sensing/edge/config/pipeline.yaml \
     --log-level INFO
 
-# Performance tuning: pin to cores 2-3 (leave 0-1 for OS and hostapd)
+# Performance tuning
 CPUAffinity=2 3
 Nice=-5
 

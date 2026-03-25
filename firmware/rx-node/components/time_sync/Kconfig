@@ -2,9 +2,10 @@ menu "Time Sync Configuration"
 
     config CSI_SNTP_SERVER
         string "SNTP server address"
-        default "192.168.4.1"
+        default "pool.ntp.org"
         help
-            IP address or hostname of the SNTP server (usually the Pi AP).
+            SNTP server hostname or IP. Uses a public NTP server since
+            all nodes have internet access via the phone hotspot.
 
     config CSI_SNTP_SYNC_TIMEOUT
         int "SNTP sync timeout retries"

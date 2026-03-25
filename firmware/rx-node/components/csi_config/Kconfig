@@ -10,9 +10,11 @@ menu "CSI Node Configuration"
 
     config CSI_TARGET_IP
         string "Aggregator IP address"
-        default "192.168.4.1"
+        default "172.20.10.2"
         help
-            IP address of the Raspberry Pi aggregator.
+            IP address of the Raspberry Pi aggregator on the hotspot network.
+            iPhone hotspots typically assign IPs in the 172.20.10.x range.
+            Check the Pi's IP after it connects and set this accordingly.
 
     config CSI_TARGET_PORT
         int "Aggregator UDP port"
@@ -29,22 +31,23 @@ menu "CSI Node Configuration"
             Set to FF:FF:FF:FF:FF:FF to accept all frames.
 
     config CSI_WIFI_SSID
-        string "WiFi AP SSID"
-        default "CSI_SENSING_NET"
+        string "WiFi hotspot SSID"
+        default "iPhone"
         help
-            SSID of the Raspberry Pi access point.
+            SSID of the WiFi hotspot (e.g. iPhone personal hotspot).
 
     config CSI_WIFI_PASSWORD
-        string "WiFi AP Password"
+        string "WiFi hotspot password"
         default "changeme123"
         help
-            WPA2 password for the Raspberry Pi access point.
+            WPA2 password for the WiFi hotspot.
 
     config CSI_WIFI_CHANNEL
-        int "WiFi channel"
-        range 1 13
-        default 6
+        int "WiFi channel (0 = auto-scan)"
+        range 0 13
+        default 0
         help
-            WiFi channel. Must match TX node and Pi AP.
+            WiFi channel. Set to 0 for auto-scan (recommended when using
+            a phone hotspot since the channel is chosen by the phone).
 
 endmenu

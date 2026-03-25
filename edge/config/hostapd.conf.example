@@ -1,5 +1,10 @@
-# hostapd.conf — WiFi AP for ESP32 CSI nodes.
-# Copy to /etc/hostapd/hostapd.conf and set real SSID/password.
+# hostapd.conf — NOT USED in the current topology.
+#
+# The system now uses an iPhone hotspot as the AP instead of the Pi.
+# All devices (Pi + ESP32 nodes) connect to the hotspot as STAs.
+#
+# This file is kept for reference in case you want to revert to a
+# Pi-as-AP topology in the future.
 
 interface=wlan0
 driver=nl80211

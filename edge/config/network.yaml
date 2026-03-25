@@ -1,4 +1,7 @@
 # network.yaml — Network configuration for CSI edge pipeline.
+#
+# All devices (Pi + ESP32 nodes) connect to an iPhone hotspot as STAs.
+# The Pi receives CSI packets from ESP32 RX nodes via UDP.
 
 # UDP receiver for ESP32 CSI packets
 udp_host: "0.0.0.0"
@@ -14,10 +17,3 @@ aligner_stale_threshold: 50   # Seq numbers older than max-50 are dropped
 # ZMQ GPU forwarder
 gpu_address: "tcp://*:5556"   # Pi binds; GPU SUB connects
 gpu_send_hwm: 100             # Max queued tensors before dropping
-
-# Raspberry Pi AP network
-ap_interface: "wlan0"
-ap_ip: "192.168.4.1"
-ap_subnet: "255.255.255.0"
-dhcp_range_start: "192.168.4.10"
-dhcp_range_end: "192.168.4.50"

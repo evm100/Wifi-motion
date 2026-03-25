@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # setup.sh — Idempotent setup for Raspberry Pi CSI edge pipeline.
 #
+# The Pi connects to an iPhone hotspot as a WiFi client (STA).
 # Installs system dependencies, creates Python venv, installs packages,
-# symlinks proto/, copies network configs, and installs systemd unit.
+# and installs the systemd unit.
 #
 # Usage: sudo bash edge/setup.sh
 
@@ -21,8 +22,6 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
     python3-venv \
     python3-dev \
-    hostapd \
-    dnsmasq \
     libatlas-base-dev \
     libopenblas-dev
 
@@ -46,26 +45,6 @@ else
     echo "proto/ found — accessible via PYTHONPATH=${REPO_ROOT}"
 fi
 
-# --- Network configs ---
-echo "--- Configuring network services ---"
-
-# hostapd
-if [ ! -f /etc/hostapd/hostapd.conf ]; then
-    cp "${EDGE_DIR}/config/hostapd.conf.example" /etc/hostapd/hostapd.conf
-    echo "Copied hostapd.conf.example → /etc/hostapd/hostapd.conf"
-    echo ">>> EDIT /etc/hostapd/hostapd.conf to set SSID and password <<<"
-else
-    echo "hostapd.conf already exists — skipping (check manually)"
-fi
-
-# dnsmasq
-if [ ! -f /etc/dnsmasq.d/csi-sensing.conf ]; then
-    cp "${EDGE_DIR}/config/dnsmasq.conf" /etc/dnsmasq.d/csi-sensing.conf
-    echo "Installed dnsmasq config to /etc/dnsmasq.d/csi-sensing.conf"
-else
-    echo "dnsmasq config already exists — skipping"
-fi
-
 # --- systemd unit ---
 echo "--- Installing systemd service ---"
 cp "${EDGE_DIR}/systemd/csi-aggregator.service" /etc/systemd/system/csi-aggregator.service
@@ -73,15 +52,9 @@ systemctl daemon-reload
 systemctl enable csi-aggregator.service
 echo "Enabled csi-aggregator.service (start with: systemctl start csi-aggregator)"
 
-# Enable hostapd and dnsmasq
-systemctl unmask hostapd 2>/dev/null || true
-systemctl enable hostapd
-systemctl enable dnsmasq
-
 echo ""
 echo "=== Setup complete ==="
 echo "Next steps:"
-echo "  1. Edit /etc/hostapd/hostapd.conf with your SSID and password"
-echo "  2. Configure static IP on wlan0 (192.168.4.1/24)"
-echo "  3. Reboot or start services:"
-echo "     sudo systemctl start hostapd dnsmasq csi-aggregator"
+echo "  1. Connect the Pi to your iPhone hotspot WiFi network"
+echo "  2. Note the Pi's IP address (ip addr show wlan0) — ESP32 nodes need it"
+echo "  3. Start the pipeline: sudo systemctl start csi-aggregator"

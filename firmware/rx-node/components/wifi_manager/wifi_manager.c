@@ -1,5 +1,5 @@
 /**
- * wifi_manager.c — STA connection to configurable AP with auto-reconnect.
+ * wifi_manager.c — STA connection to WiFi hotspot with auto-reconnect.
  *
  * Uses CONFIG_CSI_WIFI_SSID, CONFIG_CSI_WIFI_PASSWORD, CONFIG_CSI_WIFI_CHANNEL
  * from the csi_config Kconfig menu.
