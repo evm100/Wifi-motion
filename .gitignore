@@ -28,6 +28,7 @@ coverage.xml
 firmware/*/build/
 firmware/*/sdkconfig
 firmware/*/sdkconfig.old
+firmware/*/sdkconfig.provision
 firmware/*/dependencies.lock
 firmware/*/managed_components/
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # flash_all.sh — Interactive provisioning and sequential flashing for all 4 ESP32-S3 nodes
 #
-# Prompts for WiFi credentials and node configuration, then builds firmware with
-# those values baked in and flashes each board in sequence:
+# Prompts for WiFi credentials and node configuration, then builds and flashes
+# each board one at a time through the SAME USB port. The user swaps boards
+# between flashes.
+#
 #   1. TX node  (ESP-NOW broadcaster)
 #   2. RX node 1 (CSI receiver, node_id=1)
 #   3. RX node 2 (CSI receiver, node_id=2)
@@ -16,7 +18,6 @@
 #
 # Requirements:
 #   - ESP-IDF 5.5+ environment activated (source export.sh or 'esp' alias)
-#   - All 4 boards connected via USB (can be plugged in one at a time if prompted)
 
 set -euo pipefail
 
@@ -53,6 +54,25 @@ separator() {
     echo -e "${DIM}--------------------------------------------${NC}"
 }
 
+wait_for_board() {
+    local label="$1"
+    echo
+    echo -e "  ${YELLOW}>>> Plug in the ${BOLD}${label}${NC}${YELLOW} board via USB <<<${NC}"
+    read -rp "$(echo -e "  ${CYAN}Press Enter when ready (or 's' to skip)...${NC} ")" REPLY
+    if [[ "${REPLY,,}" == s* ]]; then
+        return 1
+    fi
+    return 0
+}
+
+detect_port() {
+    # Find the first available serial port
+    for dev in /dev/ttyUSB* /dev/ttyACM*; do
+        [ -e "$dev" ] && { echo "$dev"; return 0; }
+    done
+    return 1
+}
+
 # --- Prerequisites ---
 
 if ! command -v idf.py &>/dev/null; then
@@ -69,117 +89,77 @@ echo "  WiFi CSI Sensing — Provision & Flash"
 echo "  1 TX node + 3 RX nodes (ESP32-S3)"
 echo "============================================"
 echo -e "${NC}"
+echo -e "  ${DIM}Boards are flashed one at a time through the same USB port.${NC}"
+echo -e "  ${DIM}You will be prompted to swap boards between each flash.${NC}"
+echo
 
 # =============================================
 # Step 1: Gather configuration
 # =============================================
 
 echo -e "${BOLD}Network Configuration${NC}"
-prompt         WIFI_SSID     "WiFi AP SSID"            "CSI_SENSING_NET"
-prompt_password WIFI_PASS    "WiFi AP password"         "changeme123"
-prompt         WIFI_CHANNEL  "WiFi channel (1-13)"      "6"
-prompt         TARGET_IP     "Pi aggregator IP"         "192.168.4.1"
-prompt         TARGET_PORT   "Pi aggregator UDP port"   "5005"
+prompt         WIFI_SSID     "WiFi hotspot SSID"                "iPhone"
+prompt_password WIFI_PASS    "WiFi hotspot password"             "changeme123"
+prompt         WIFI_CHANNEL  "WiFi channel (0 = auto-scan)"      "0"
+prompt         TARGET_IP     "Pi aggregator IP"                  "172.20.10.2"
+prompt         TARGET_PORT   "Pi aggregator UDP port"            "5005"
 echo
 
 echo -e "${BOLD}TX Node Configuration${NC}"
-prompt         TX_RATE       "TX frame rate in Hz"      "100"
+prompt         TX_RATE       "TX frame rate in Hz"               "100"
 echo
 
 echo -e "${BOLD}RX Node Configuration${NC}"
 echo -e "  ${DIM}The TX MAC lets RX nodes filter CSI to only frames from your TX board.${NC}"
 echo -e "  ${DIM}Use FF:FF:FF:FF:FF:FF to accept frames from any transmitter.${NC}"
-echo -e "  ${DIM}Tip: run 'esptool.py --port <TX_PORT> read_mac' to find your TX MAC.${NC}"
-prompt         TX_MAC        "TX node MAC filter"       "FF:FF:FF:FF:FF:FF"
+echo -e "  ${DIM}Tip: after flashing TX, run 'esptool.py --port <PORT> read_mac' to find its MAC.${NC}"
+prompt         TX_MAC        "TX node MAC filter"                "FF:FF:FF:FF:FF:FF"
 echo
 
-# =============================================
-# Step 2: Assign serial ports
-# =============================================
-
-echo -e "${BOLD}Serial Port Assignment${NC}"
-
-# Auto-detect available ports
-DETECTED_PORTS=()
-for dev in /dev/ttyUSB* /dev/ttyACM*; do
-    [ -e "$dev" ] && DETECTED_PORTS+=("$dev")
-done
-if [ ${#DETECTED_PORTS[@]} -gt 0 ]; then
-    echo -e "  Detected ports: ${GREEN}${DETECTED_PORTS[*]}${NC}"
-else
-    echo -e "  ${YELLOW}No serial ports detected. Enter paths manually.${NC}"
+echo -e "${BOLD}Serial Port${NC}"
+DETECTED=$(detect_port 2>/dev/null || true)
+if [ -n "$DETECTED" ]; then
+    echo -e "  Detected: ${GREEN}${DETECTED}${NC}"
 fi
-echo -e "  ${DIM}Plug boards in one at a time to identify which port maps to which node.${NC}"
+prompt         FLASH_PORT    "Serial port for flashing"          "${DETECTED:-/dev/ttyUSB0}"
 echo
-
-DEF_TX="${DETECTED_PORTS[0]:-/dev/ttyUSB0}"
-DEF_RX1="${DETECTED_PORTS[1]:-/dev/ttyUSB1}"
-DEF_RX2="${DETECTED_PORTS[2]:-/dev/ttyUSB2}"
-DEF_RX3="${DETECTED_PORTS[3]:-/dev/ttyUSB3}"
-
-prompt TX_PORT    "TX  node serial port"          "$DEF_TX"
-prompt RX1_PORT   "RX1 node serial port (id=1)"   "$DEF_RX1"
-prompt RX2_PORT   "RX2 node serial port (id=2)"   "$DEF_RX2"
-prompt RX3_PORT   "RX3 node serial port (id=3)"   "$DEF_RX3"
-echo
-
-# Validate ports
-WARN_COUNT=0
-for pair in "TX:$TX_PORT" "RX1:$RX1_PORT" "RX2:$RX2_PORT" "RX3:$RX3_PORT"; do
-    label="${pair%%:*}"
-    port="${pair#*:}"
-    if [ ! -e "$port" ]; then
-        echo -e "  ${YELLOW}Warning: $port ($label) does not exist yet${NC}"
-        WARN_COUNT=$((WARN_COUNT + 1))
-    fi
-done
-
-# Check for duplicates
-ALL_PORTS=("$TX_PORT" "$RX1_PORT" "$RX2_PORT" "$RX3_PORT")
-SORTED_PORTS=($(printf '%s\n' "${ALL_PORTS[@]}" | sort))
-for ((i=1; i<${#SORTED_PORTS[@]}; i++)); do
-    if [ "${SORTED_PORTS[$i]}" = "${SORTED_PORTS[$((i-1))]}" ]; then
-        echo -e "  ${RED}Error: Duplicate port ${SORTED_PORTS[$i]} — each node needs its own port.${NC}"
-        exit 1
-    fi
-done
 
 # =============================================
-# Step 3: Confirm
+# Step 2: Confirm
 # =============================================
 
-echo
 separator
 echo -e "${BOLD}  Configuration Summary${NC}"
 separator
 echo "  WiFi SSID:        $WIFI_SSID"
-echo "  WiFi Channel:     $WIFI_CHANNEL"
+echo "  WiFi Channel:     $WIFI_CHANNEL (0 = auto)"
 echo "  Aggregator:       $TARGET_IP:$TARGET_PORT"
 echo "  TX Rate:          ${TX_RATE} Hz"
 echo "  TX MAC Filter:    $TX_MAC"
+echo "  Flash port:       $FLASH_PORT"
 separator
-echo "  TX  → $TX_PORT"
-echo "  RX1 → $RX1_PORT   (node_id=1)"
-echo "  RX2 → $RX2_PORT   (node_id=2)"
-echo "  RX3 → $RX3_PORT   (node_id=3)"
+echo "  Flash order:"
+echo "    1. TX  node"
+echo "    2. RX1 node  (node_id=1)"
+echo "    3. RX2 node  (node_id=2)"
+echo "    4. RX3 node  (node_id=3)"
 separator
 echo
 
-read -rp "$(echo -e "${YELLOW}Proceed with build and flash? [Y/n]: ${NC}")" CONFIRM
+read -rp "$(echo -e "${YELLOW}Proceed? [Y/n]: ${NC}")" CONFIRM
 if [[ "${CONFIRM,,}" == n* ]]; then
     echo "Aborted."
     exit 0
 fi
 
 # =============================================
-# Step 4: Generate sdkconfig override files
+# Step 3: Generate sdkconfig override files
 # =============================================
 
 TX_PROVISION="$TX_DIR/sdkconfig.provision"
 RX_PROVISION="$RX_DIR/sdkconfig.provision"
 
 # ESP-IDF merges these in order; later files win.
-# sdkconfig.defaults → sdkconfig.defaults.esp32s3 → sdkconfig.provision
 TX_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;sdkconfig.provision"
 RX_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;sdkconfig.provision"
 
@@ -207,14 +187,13 @@ CONFIG_CSI_TX_MAC="$TX_MAC"
 PROV
 }
 
-# Clean up provision files on exit (success or failure)
 cleanup() {
     rm -f "$TX_PROVISION" "$RX_PROVISION"
 }
 trap cleanup EXIT
 
 # =============================================
-# Step 5: Build and flash each node
+# Step 4: Build and flash each node
 # =============================================
 
 declare -A RESULTS
@@ -222,51 +201,50 @@ TOTAL=4
 STEP=0
 FAIL_COUNT=0
 START_TIME=$SECONDS
+RX_TARGET_SET=false
 
-# --- TX Node ---
+# ---- TX Node ----
 
 STEP=$((STEP + 1))
 echo
-echo -e "${BOLD}[$STEP/$TOTAL] TX Node → $TX_PORT${NC}"
+echo -e "${BOLD}[$STEP/$TOTAL] TX Node${NC}"
 separator
 
 write_tx_provision
-
-# Full clean build (set-target wipes build dir)
 rm -f "$TX_DIR/sdkconfig"
-echo -e "  ${DIM}Setting target and building...${NC}"
+
+echo -e "  ${DIM}Setting target and building TX firmware...${NC}"
 if idf.py -C "$TX_DIR" \
     -DSDKCONFIG_DEFAULTS="$TX_DEFAULTS" \
     set-target esp32s3 2>&1 | tail -3 \
   && idf.py -C "$TX_DIR" build 2>&1 | tail -5; then
     echo -e "  ${GREEN}Build OK${NC}"
+
+    if wait_for_board "TX"; then
+        echo -e "  ${DIM}Flashing TX to $FLASH_PORT...${NC}"
+        if idf.py -C "$TX_DIR" -p "$FLASH_PORT" flash 2>&1 | tail -5; then
+            RESULTS["1-TX"]="OK"
+            echo -e "  ${GREEN}TX node flashed successfully${NC}"
+        else
+            RESULTS["1-TX"]="FLASH_FAIL"
+            FAIL_COUNT=$((FAIL_COUNT + 1))
+            echo -e "  ${RED}TX node flash FAILED${NC}"
+        fi
+    else
+        RESULTS["1-TX"]="SKIPPED"
+        echo -e "  ${YELLOW}TX node skipped${NC}"
+    fi
 else
-    echo -e "  ${RED}Build FAILED${NC}"
-    RESULTS["TX → $TX_PORT"]="BUILD_FAIL"
+    echo -e "  ${RED}TX build FAILED${NC}"
+    RESULTS["1-TX"]="BUILD_FAIL"
     FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
-if [ "${RESULTS["TX → $TX_PORT"]:-}" != "BUILD_FAIL" ]; then
-    echo -e "  ${DIM}Flashing...${NC}"
-    if idf.py -C "$TX_DIR" -p "$TX_PORT" flash 2>&1 | tail -5; then
-        RESULTS["TX → $TX_PORT"]="OK"
-        echo -e "  ${GREEN}TX node flashed successfully${NC}"
-    else
-        RESULTS["TX → $TX_PORT"]="FLASH_FAIL"
-        FAIL_COUNT=$((FAIL_COUNT + 1))
-        echo -e "  ${RED}TX node flash FAILED${NC}"
-    fi
-fi
-
-# --- RX Nodes ---
-
-RX_TARGET_SET=false
+# ---- RX Nodes ----
 
 for node_id in 1 2 3; do
     STEP=$((STEP + 1))
-    port_var="RX${node_id}_PORT"
-    port="${!port_var}"
-    label="RX${node_id} (id=${node_id}) → $port"
+    label="RX${node_id} (id=${node_id})"
 
     echo
     echo -e "${BOLD}[$STEP/$TOTAL] $label${NC}"
@@ -275,28 +253,26 @@ for node_id in 1 2 3; do
     write_rx_provision "$node_id"
     rm -f "$RX_DIR/sdkconfig"
 
-    BUILD_OK=true
-
     if [ "$RX_TARGET_SET" = "false" ]; then
-        # First RX build: full set-target (cleans build dir)
-        echo -e "  ${DIM}Setting target and building (full build)...${NC}"
+        echo -e "  ${DIM}Setting target and building RX firmware (node_id=$node_id, full build)...${NC}"
         if idf.py -C "$RX_DIR" \
             -DSDKCONFIG_DEFAULTS="$RX_DEFAULTS" \
             set-target esp32s3 2>&1 | tail -3 \
           && idf.py -C "$RX_DIR" build 2>&1 | tail -5; then
             echo -e "  ${GREEN}Build OK${NC}"
+            BUILD_OK=true
         else
             echo -e "  ${RED}Build FAILED${NC}"
             BUILD_OK=false
         fi
         RX_TARGET_SET=true
     else
-        # Subsequent RX builds: incremental (only node_id changed)
-        echo -e "  ${DIM}Rebuilding with node_id=$node_id (incremental)...${NC}"
+        echo -e "  ${DIM}Rebuilding RX firmware with node_id=$node_id (incremental)...${NC}"
         if idf.py -C "$RX_DIR" \
             -DSDKCONFIG_DEFAULTS="$RX_DEFAULTS" \
             build 2>&1 | tail -5; then
             echo -e "  ${GREEN}Build OK${NC}"
+            BUILD_OK=true
         else
             echo -e "  ${RED}Build FAILED${NC}"
             BUILD_OK=false
@@ -304,23 +280,28 @@ for node_id in 1 2 3; do
     fi
 
     if [ "$BUILD_OK" = "true" ]; then
-        echo -e "  ${DIM}Flashing...${NC}"
-        if idf.py -C "$RX_DIR" -p "$port" flash 2>&1 | tail -5; then
-            RESULTS["$label"]="OK"
-            echo -e "  ${GREEN}RX node $node_id flashed successfully${NC}"
+        if wait_for_board "$label"; then
+            echo -e "  ${DIM}Flashing RX node $node_id to $FLASH_PORT...${NC}"
+            if idf.py -C "$RX_DIR" -p "$FLASH_PORT" flash 2>&1 | tail -5; then
+                RESULTS["$((node_id+1))-RX${node_id}"]="OK"
+                echo -e "  ${GREEN}RX node $node_id flashed successfully${NC}"
+            else
+                RESULTS["$((node_id+1))-RX${node_id}"]="FLASH_FAIL"
+                FAIL_COUNT=$((FAIL_COUNT + 1))
+                echo -e "  ${RED}RX node $node_id flash FAILED${NC}"
+            fi
         else
-            RESULTS["$label"]="FLASH_FAIL"
-            FAIL_COUNT=$((FAIL_COUNT + 1))
-            echo -e "  ${RED}RX node $node_id flash FAILED${NC}"
+            RESULTS["$((node_id+1))-RX${node_id}"]="SKIPPED"
+            echo -e "  ${YELLOW}RX node $node_id skipped${NC}"
         fi
     else
-        RESULTS["$label"]="BUILD_FAIL"
+        RESULTS["$((node_id+1))-RX${node_id}"]="BUILD_FAIL"
         FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 done
 
 # =============================================
-# Step 6: Summary
+# Step 5: Summary
 # =============================================
 
 ELAPSED=$(( SECONDS - START_TIME ))
@@ -334,21 +315,23 @@ echo -e "============================================${NC}"
 
 for key in $(printf '%s\n' "${!RESULTS[@]}" | sort); do
     status="${RESULTS[$key]}"
+    name="${key#*-}"  # strip sort prefix
     if [ "$status" = "OK" ]; then
-        echo -e "  ${GREEN}✓${NC} $key"
+        echo -e "  ${GREEN}✓${NC} $name"
+    elif [ "$status" = "SKIPPED" ]; then
+        echo -e "  ${YELLOW}–${NC} $name  (skipped)"
     else
-        echo -e "  ${RED}✗${NC} $key  — $status"
+        echo -e "  ${RED}✗${NC} $name  — $status"
     fi
 done
 
 echo
 if [ "$FAIL_COUNT" -eq 0 ]; then
-    echo -e "${GREEN}All 4 nodes provisioned and flashed successfully!${NC}"
+    echo -e "${GREEN}All nodes provisioned and flashed successfully!${NC}"
     echo
     echo -e "${DIM}Next steps:${NC}"
-    echo -e "${DIM}  Monitor TX:  idf.py -p $TX_PORT monitor${NC}"
-    echo -e "${DIM}  Monitor RX1: idf.py -p $RX1_PORT monitor${NC}"
-    echo -e "${DIM}  Read TX MAC: esptool.py --port $TX_PORT read_mac${NC}"
+    echo -e "${DIM}  Plug in any node and monitor: idf.py -p $FLASH_PORT monitor${NC}"
+    echo -e "${DIM}  Read a board's MAC:           esptool.py --port $FLASH_PORT read_mac${NC}"
     exit 0
 else
     echo -e "${RED}${FAIL_COUNT} node(s) failed. Review the output above.${NC}"
