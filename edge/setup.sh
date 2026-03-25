@@ -22,7 +22,6 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
     python3-venv \
     python3-dev \
-    libatlas-base-dev \
     libopenblas-dev
 
 # --- Python virtual environment ---
