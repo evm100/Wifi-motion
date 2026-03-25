@@ -1,0 +1,54 @@
+menu "CSI Stream Configuration"
+
+    config CSI_RING_BUF_SIZE_KB
+        int "Ring buffer size (KB, allocated in PSRAM)"
+        range 8 128
+        default 32
+        help
+            Size of the PSRAM ring buffer in kilobytes for CSI packet queuing.
+            32 KB holds ~115 packets at 276 bytes each.
+
+    config CSI_STATS_INTERVAL_MS
+        int "Statistics log interval (ms)"
+        range 1000 60000
+        default 5000
+        help
+            Interval in milliseconds between CSI statistics log messages
+            (packet counts, drop rate, heap usage).
+
+    config CSI_UDP_SNDBUF_SIZE
+        int "UDP socket send buffer size (bytes)"
+        range 4096 65536
+        default 16384
+        help
+            Size of the UDP socket send buffer in bytes.
+
+    config CSI_SENDER_TASK_STACK
+        int "UDP sender task stack size (bytes)"
+        range 2048 8192
+        default 4096
+        help
+            Stack size for the UDP sender task on Core 1.
+
+    config CSI_LLTF_EN
+        bool "Enable LLTF (Legacy Long Training Field) CSI capture"
+        default y
+        help
+            Capture CSI from the Legacy Long Training Field.
+            Provides 52 valid subcarriers.
+
+    config CSI_HTLTF_EN
+        bool "Enable HT-LTF (High Throughput Long Training Field) CSI capture"
+        default y
+        help
+            Capture CSI from the HT Long Training Field.
+            Provides 56 additional valid subcarriers.
+
+    config CSI_STBC_HTLTF2_EN
+        bool "Enable STBC HT-LTF2 CSI capture"
+        default n
+        help
+            Capture CSI from the second HT-LTF in STBC frames.
+            Usually not needed for ESP-NOW broadcast sensing.
+
+endmenu

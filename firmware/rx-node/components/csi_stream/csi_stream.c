@@ -24,7 +24,7 @@
 
 static const char *TAG = "csi_stream";
 
-#define CSI_RING_BUF_SIZE   (32 * 1024)  /* 32 KB in PSRAM (~115 packets) */
+#define CSI_RING_BUF_SIZE   (CONFIG_CSI_RING_BUF_SIZE_KB * 1024)
 
 static RingbufHandle_t s_csi_ringbuf = NULL;
 static int s_udp_sock = -1;
@@ -157,7 +157,7 @@ static void udp_sender_task(void *pvParams)
 static void stats_task(void *pvParams)
 {
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_CSI_STATS_INTERVAL_MS));
 
         uint32_t cb = s_cb_count;
         uint32_t sent = s_send_count;
@@ -215,7 +215,7 @@ esp_err_t csi_stream_init(const uint8_t *filter_mac)
     }
 
     /* Increase socket send buffer */
-    int sndbuf = 16384;
+    int sndbuf = CONFIG_CSI_UDP_SNDBUF_SIZE;
     setsockopt(s_udp_sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
 
     memset(&s_target_addr, 0, sizeof(s_target_addr));
@@ -225,9 +225,21 @@ esp_err_t csi_stream_init(const uint8_t *filter_mac)
 
     /* Configure CSI collection */
     wifi_csi_config_t csi_cfg = {
+#ifdef CONFIG_CSI_LLTF_EN
         .lltf_en = true,
+#else
+        .lltf_en = false,
+#endif
+#ifdef CONFIG_CSI_HTLTF_EN
         .htltf_en = true,
+#else
+        .htltf_en = false,
+#endif
+#ifdef CONFIG_CSI_STBC_HTLTF2_EN
+        .stbc_htltf2_en = true,
+#else
         .stbc_htltf2_en = false,
+#endif
         .ltf_merge_en = false,
         .channel_filter_en = false,
         .manu_scale = false,
@@ -261,7 +273,7 @@ esp_err_t csi_stream_init(const uint8_t *filter_mac)
 
     /* Start sender task on Core 1 (keep WiFi on Core 0) */
     BaseType_t xret = xTaskCreatePinnedToCore(
-        udp_sender_task, "csi_udp_tx", 4096, NULL, 5, NULL, 1);
+        udp_sender_task, "csi_udp_tx", CONFIG_CSI_SENDER_TASK_STACK, NULL, 5, NULL, 1);
     if (xret != pdPASS) {
         ESP_LOGE(TAG, "Failed to create UDP sender task");
         return ESP_ERR_NO_MEM;

@@ -1,0 +1,18 @@
+menu "Health Check Configuration"
+
+    config CSI_HEALTH_INTERVAL_MS
+        int "Health check log interval (ms)"
+        range 1000 60000
+        default 10000
+        help
+            Interval in milliseconds between health status log messages.
+            Also controls watchdog feed rate.
+
+    config CSI_HEALTH_TASK_STACK
+        int "Health check task stack size (bytes)"
+        range 1024 8192
+        default 2048
+        help
+            Stack size for the health check task.
+
+endmenu

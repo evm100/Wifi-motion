@@ -19,7 +19,6 @@ static const char *TAG = "wifi_manager";
 
 #define WIFI_CONNECTED_BIT  BIT0
 #define WIFI_FAIL_BIT       BIT1
-#define WIFI_MAX_RETRY      10
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_count = 0;
@@ -36,13 +35,19 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t *)event_data;
         ESP_LOGW(TAG, "Disconnected (reason=%d), reconnecting...", disconn->reason);
 
-        if (s_retry_count < WIFI_MAX_RETRY) {
+#if CONFIG_CSI_WIFI_MAX_RETRY > 0
+        if (s_retry_count < CONFIG_CSI_WIFI_MAX_RETRY) {
             s_retry_count++;
             esp_wifi_connect();
         } else {
-            ESP_LOGE(TAG, "Max retries (%d) exceeded", WIFI_MAX_RETRY);
+            ESP_LOGE(TAG, "Max retries (%d) exceeded", CONFIG_CSI_WIFI_MAX_RETRY);
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
+#else
+        /* Infinite retry */
+        s_retry_count++;
+        esp_wifi_connect();
+#endif
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));

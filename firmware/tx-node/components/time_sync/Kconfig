@@ -1,0 +1,16 @@
+menu "Time Sync Configuration"
+
+    config CSI_SNTP_SERVER
+        string "SNTP server address"
+        default "192.168.4.1"
+        help
+            IP address or hostname of the SNTP server (usually the Pi AP).
+
+    config CSI_SNTP_SYNC_TIMEOUT
+        int "SNTP sync timeout retries"
+        range 1 30
+        default 7
+        help
+            Number of 2-second retries waiting for initial SNTP sync.
+
+endmenu

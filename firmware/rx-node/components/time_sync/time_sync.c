@@ -21,9 +21,9 @@ static void time_sync_notification(struct timeval *tv)
 
 esp_err_t time_sync_init(void)
 {
-    ESP_LOGI(TAG, "Initializing SNTP to 192.168.4.1");
+    ESP_LOGI(TAG, "Initializing SNTP to %s", CONFIG_CSI_SNTP_SERVER);
 
-    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("192.168.4.1");
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG(CONFIG_CSI_SNTP_SERVER);
     config.sync_cb = time_sync_notification;
     esp_err_t ret = esp_netif_sntp_init(&config);
     if (ret != ESP_OK) {
@@ -33,8 +33,8 @@ esp_err_t time_sync_init(void)
 
     /* Wait for initial sync (up to ~15 seconds) */
     int retry = 0;
-    while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(2000)) != ESP_OK && retry < 7) {
-        ESP_LOGI(TAG, "Waiting for SNTP sync... (%d/7)", ++retry);
+    while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(2000)) != ESP_OK && retry < CONFIG_CSI_SNTP_SYNC_TIMEOUT) {
+        ESP_LOGI(TAG, "Waiting for SNTP sync... (%d/%d)", ++retry, CONFIG_CSI_SNTP_SYNC_TIMEOUT);
     }
 
     if (!s_synced) {

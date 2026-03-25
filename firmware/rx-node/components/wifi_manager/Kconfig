@@ -1,0 +1,10 @@
+menu "WiFi Manager Configuration"
+
+    config CSI_WIFI_MAX_RETRY
+        int "Maximum WiFi reconnect attempts"
+        range 0 255
+        default 10
+        help
+            Number of reconnect attempts before giving up. 0 = infinite retry.
+
+endmenu

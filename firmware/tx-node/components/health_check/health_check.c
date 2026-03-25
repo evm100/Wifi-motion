@@ -13,7 +13,7 @@
 
 static const char *TAG = "health_check";
 
-#define HEALTH_CHECK_INTERVAL_MS  10000
+#define HEALTH_CHECK_INTERVAL_MS  CONFIG_CSI_HEALTH_INTERVAL_MS
 
 static void health_check_task(void *pvParams)
 {
@@ -41,7 +41,7 @@ esp_err_t health_check_init(void)
     ESP_LOGI(TAG, "Starting health check (interval=%d ms)", HEALTH_CHECK_INTERVAL_MS);
 
     BaseType_t ret = xTaskCreatePinnedToCore(
-        health_check_task, "health_chk", 2048, NULL, 1, NULL, 1);
+        health_check_task, "health_chk", CONFIG_CSI_HEALTH_TASK_STACK, NULL, 1, NULL, 1);
     if (ret != pdPASS) {
         ESP_LOGE(TAG, "Failed to create health check task");
         return ESP_ERR_NO_MEM;

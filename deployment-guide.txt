@@ -40,23 +40,56 @@
   TX node:
   cd firmware/tx-node
   idf.py menuconfig
-  Navigate to WiFi Manager Configuration and set:
+
+  WiFi Manager Configuration:
   - WiFi AP SSID → same as hostapd.conf
   - WiFi AP Password → same as hostapd.conf
-  - WiFi channel → 6
+  - WiFi channel → 6 (must match Pi AP and all RX nodes)
+  - Maximum WiFi reconnect attempts → 10 (0 = infinite retry)
 
-  Optionally adjust the TX rate under CSI TX Configuration (default 100 Hz is fine).
+  CSI TX Configuration:
+  - TX frame injection rate (Hz) → 100 (default; 200 for gesture recognition)
+
+  Time Sync Configuration:
+  - SNTP server address → 192.168.4.1 (default; set to Pi's IP)
+  - SNTP sync timeout retries → 7 (number of 2-second retries)
+
+  Health Check Configuration:
+  - Health check log interval (ms) → 10000 (default)
+  - Health check task stack size (bytes) → 2048 (default)
 
   RX node (repeat for each node, changing the node ID):
   cd firmware/rx-node
   idf.py menuconfig
-  Navigate to CSI Node Configuration and set:
+
+  CSI Node Configuration:
   - Node ID → 1 for the first RX board, 2 for second, 3 for third
   - WiFi AP SSID / Password → same as Pi AP
+  - WiFi channel → 6 (must match TX node and Pi AP)
   - TX node MAC address → the MAC of your TX ESP32 (find it in the TX serial monitor output at boot, or use FF:FF:FF:FF:FF:FF to
   accept all)
   - Aggregator IP → 192.168.4.1 (default)
   - Aggregator UDP port → 5005 (default)
+
+  WiFi Manager Configuration:
+  - Maximum WiFi reconnect attempts → 10 (0 = infinite retry)
+
+  CSI Stream Configuration:
+  - Ring buffer size (KB) → 32 (PSRAM ring buffer, ~115 packets)
+  - Statistics log interval (ms) → 5000 (how often stats are printed)
+  - UDP socket send buffer size (bytes) → 16384
+  - UDP sender task stack size (bytes) → 4096
+  - Enable LLTF CSI capture → y (52 subcarriers from Legacy LTF)
+  - Enable HT-LTF CSI capture → y (56 subcarriers from HT LTF)
+  - Enable STBC HT-LTF2 CSI capture → n (not needed for ESP-NOW sensing)
+
+  Time Sync Configuration:
+  - SNTP server address → 192.168.4.1 (default; set to Pi's IP)
+  - SNTP sync timeout retries → 7 (number of 2-second retries)
+
+  Health Check Configuration:
+  - Health check log interval (ms) → 10000 (default)
+  - Health check task stack size (bytes) → 2048 (default)
 
   2b. Build both firmwares
 
@@ -87,7 +120,7 @@
   Open a serial monitor on any RX node (idf.py -p /dev/ttyUSBx monitor). You should see:
   - WiFi connected to the Pi AP
   - CSI packets being received and sent via UDP
-  - Stats logged every 5 seconds (packet rate, RSSI, heap)
+  - Stats logged periodically (packet rate, RSSI, heap) — interval configurable via CSI Stream Configuration
 
   ---
   Step 3: Start the Edge Pipeline on the Pi
