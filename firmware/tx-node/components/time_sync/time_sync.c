@@ -5,7 +5,6 @@
 #include "time_sync.h"
 
 #include <sys/time.h>
-#include "esp_sntp.h"
 #include "esp_netif_sntp.h"
 #include "esp_log.h"
 

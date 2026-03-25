@@ -10,8 +10,8 @@ menu "Health Check Configuration"
 
     config CSI_HEALTH_TASK_STACK
         int "Health check task stack size (bytes)"
-        range 1024 8192
-        default 2048
+        range 2048 8192
+        default 4096
         help
             Stack size for the health check task.
 

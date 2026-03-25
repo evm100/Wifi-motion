@@ -90,7 +90,7 @@ esp_err_t wifi_manager_init(void)
             .ssid = CONFIG_CSI_WIFI_SSID,
             .password = CONFIG_CSI_WIFI_PASSWORD,
             .channel = CONFIG_CSI_WIFI_CHANNEL,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+            .threshold.authmode = WIFI_AUTH_WPA_PSK,
         },
     };
 
