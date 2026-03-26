@@ -30,21 +30,14 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_connected = false;
         wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t *)event_data;
-        ESP_LOGW(TAG, "Disconnected (reason=%d), reconnecting...", disconn->reason);
-
-#if CONFIG_CSI_WIFI_MAX_RETRY > 0
-        if (s_retry_count < CONFIG_CSI_WIFI_MAX_RETRY) {
-            s_retry_count++;
-            esp_wifi_connect();
-        } else {
-            ESP_LOGE(TAG, "Max retries (%d) exceeded", CONFIG_CSI_WIFI_MAX_RETRY);
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-#else
-        /* Infinite retry */
         s_retry_count++;
+
+        /* Always retry — phone hotspots are flaky and the ESP-NOW TX
+         * depends on staying associated to the correct channel. */
+        ESP_LOGW(TAG, "Disconnected (reason=%d), retry #%d...",
+                 disconn->reason, s_retry_count);
+        vTaskDelay(pdMS_TO_TICKS(1000));  /* back off 1 s to avoid scan storm */
         esp_wifi_connect();
-#endif
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));

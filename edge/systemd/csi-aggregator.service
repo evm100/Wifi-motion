@@ -5,12 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/wifi-csi-sensing
-Environment=PYTHONPATH=/home/pi/wifi-csi-sensing
-ExecStart=/home/pi/wifi-csi-sensing/.venv/bin/python -m edge.aggregator \
-    --config /home/pi/wifi-csi-sensing/edge/config/pipeline.yaml \
+User=%DEPLOY_USER%
+Group=%DEPLOY_USER%
+WorkingDirectory=%DEPLOY_REPO%
+Environment=PYTHONPATH=%DEPLOY_REPO%
+ExecStart=%DEPLOY_REPO%/.venv/bin/python -m edge.aggregator \
+    --config %DEPLOY_REPO%/edge/config/pipeline.yaml \
     --log-level INFO
 
 # Performance tuning
@@ -26,7 +26,7 @@ SyslogIdentifier=csi-aggregator
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/home/pi/wifi-csi-sensing
+ReadWritePaths=%DEPLOY_REPO%
 
 [Install]
 WantedBy=multi-user.target

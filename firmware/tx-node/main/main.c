@@ -40,24 +40,26 @@ void app_main(void)
         return;
     }
 
-    /* Wait for IP before continuing */
+    /* Wait for IP — but don't abort if it times out.
+     * ESP-NOW only needs esp_wifi_start() (done inside wifi_manager_init),
+     * not an AP association.  Start broadcasting regardless so CSI data
+     * flows even during transient WiFi dropouts. */
     ret = wifi_manager_wait_connected(pdMS_TO_TICKS(30000));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "WiFi connection timed out");
-        return;
+        ESP_LOGW(TAG, "WiFi connection timed out — starting ESP-NOW anyway");
     }
 
-    /* Sync time via SNTP */
-    ret = time_sync_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Time sync init failed: %s (continuing anyway)", esp_err_to_name(ret));
-    }
-
-    /* Start ESP-NOW broadcast */
+    /* Start ESP-NOW broadcast — works even without AP connection */
     ret = csi_tx_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "CSI TX init failed: %s", esp_err_to_name(ret));
         return;
+    }
+
+    /* Sync time via SNTP (needs IP, best-effort) */
+    ret = time_sync_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Time sync init failed: %s (continuing anyway)", esp_err_to_name(ret));
     }
 
     /* Start health monitoring */

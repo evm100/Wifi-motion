@@ -13,8 +13,16 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 EDGE_DIR="${REPO_ROOT}/edge"
 VENV_DIR="${REPO_ROOT}/.venv"
 
+# Detect the real (non-root) user who invoked sudo
+DEPLOY_USER="${SUDO_USER:-$(whoami)}"
+if [ "${DEPLOY_USER}" = "root" ]; then
+    echo "ERROR: Run with sudo from a regular user account (sudo bash edge/setup.sh)"
+    exit 1
+fi
+
 echo "=== CSI Edge Pipeline Setup ==="
 echo "Repo root: ${REPO_ROOT}"
+echo "Deploy user: ${DEPLOY_USER}"
 
 # --- System dependencies ---
 echo "--- Installing system packages ---"
@@ -46,7 +54,10 @@ fi
 
 # --- systemd unit ---
 echo "--- Installing systemd service ---"
-cp "${EDGE_DIR}/systemd/csi-aggregator.service" /etc/systemd/system/csi-aggregator.service
+sed -e "s|%DEPLOY_USER%|${DEPLOY_USER}|g" \
+    -e "s|%DEPLOY_REPO%|${REPO_ROOT}|g" \
+    "${EDGE_DIR}/systemd/csi-aggregator.service" \
+    > /etc/systemd/system/csi-aggregator.service
 systemctl daemon-reload
 systemctl enable csi-aggregator.service
 echo "Enabled csi-aggregator.service (start with: systemctl start csi-aggregator)"
