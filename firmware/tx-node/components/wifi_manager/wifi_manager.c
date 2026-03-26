@@ -93,6 +93,11 @@ esp_err_t wifi_manager_init(void)
     ret = esp_wifi_start();
     if (ret != ESP_OK) return ret;
 
+    /* Disable power save — the radio must stay on continuously for
+     * 100 Hz ESP-NOW broadcasts.  Default WIFI_PS_MIN_MODEM puts the
+     * radio to sleep between beacons, throttling TX to ~1 pkt / 5-8 s. */
+    esp_wifi_set_ps(WIFI_PS_NONE);
+
     ESP_LOGI(TAG, "WiFi STA init complete, connecting to SSID: %s (ch %d)",
              CONFIG_CSI_WIFI_SSID, CONFIG_CSI_WIFI_CHANNEL);
 

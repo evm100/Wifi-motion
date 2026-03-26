@@ -51,7 +51,7 @@ static void csi_tx_task(void *pvParams)
                                      (const uint8_t *)&payload,
                                      sizeof(payload));
         if (ret != ESP_OK) {
-            ESP_LOGD(TAG, "esp_now_send failed: %s", esp_err_to_name(ret));
+            ESP_LOGW(TAG, "esp_now_send failed: %s", esp_err_to_name(ret));
         }
 
         vTaskDelayUntil(&last_wake, period_ticks);

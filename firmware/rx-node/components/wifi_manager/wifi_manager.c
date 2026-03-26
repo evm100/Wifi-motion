@@ -96,6 +96,11 @@ esp_err_t wifi_manager_init(void)
     ret = esp_wifi_start();
     if (ret != ESP_OK) return ret;
 
+    /* Disable power save — the radio must stay on continuously so
+     * promiscuous-mode CSI capture does not miss frames.  Default
+     * WIFI_PS_MIN_MODEM sleeps between beacons and drops most CSI. */
+    esp_wifi_set_ps(WIFI_PS_NONE);
+
     ESP_LOGI(TAG, "WiFi STA init complete, connecting to SSID: %s (ch %d)",
              CONFIG_CSI_WIFI_SSID, CONFIG_CSI_WIFI_CHANNEL);
 
