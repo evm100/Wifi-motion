@@ -3,7 +3,7 @@
  *
  * Sends broadcast frames with an incrementing 4-byte sequence number
  * as the payload. Uses vTaskDelayUntil for precise timing.
- * Task pinned to Core 0 (same as WiFi stack).
+ * Task pinned to Core 1 to avoid starvation by the WiFi task on Core 0.
  */
 
 #include "csi_tx.h"
@@ -34,6 +34,11 @@ typedef struct __attribute__((packed)) {
 
 static volatile uint32_t s_seq_num = 0;
 
+/* Send statistics (reset every 5s by stats task) */
+static volatile uint32_t s_send_ok = 0;
+static volatile uint32_t s_send_fail = 0;
+static volatile uint32_t s_cb_fail = 0;
+
 static void csi_tx_task(void *pvParams)
 {
     const TickType_t period_ticks = pdMS_TO_TICKS(1000 / CONFIG_CSI_TX_RATE_HZ);
@@ -50,7 +55,10 @@ static void csi_tx_task(void *pvParams)
         esp_err_t ret = esp_now_send(s_broadcast_mac,
                                      (const uint8_t *)&payload,
                                      sizeof(payload));
-        if (ret != ESP_OK) {
+        if (ret == ESP_OK) {
+            s_send_ok++;
+        } else {
+            s_send_fail++;
             ESP_LOGW(TAG, "esp_now_send failed: %s", esp_err_to_name(ret));
         }
 
@@ -58,11 +66,28 @@ static void csi_tx_task(void *pvParams)
     }
 }
 
+static void tx_stats_task(void *pvParams)
+{
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+
+        uint32_t ok   = s_send_ok;
+        uint32_t fail = s_send_fail;
+        uint32_t cbf  = s_cb_fail;
+        s_send_ok = 0;
+        s_send_fail = 0;
+        s_cb_fail = 0;
+
+        ESP_LOGI(TAG, "5s stats: sent=%lu fail=%lu cb_fail=%lu seq=%lu",
+                 (unsigned long)ok, (unsigned long)fail,
+                 (unsigned long)cbf, (unsigned long)s_seq_num);
+    }
+}
+
 static void esp_now_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status)
 {
     if (status != ESP_NOW_SEND_SUCCESS) {
-        ESP_LOGD(TAG, "ESP-NOW send failed to %02x:%02x:%02x:%02x:%02x:%02x",
-                 MAC2STR(tx_info->des_addr));
+        s_cb_fail++;
     }
 }
 
@@ -98,12 +123,21 @@ esp_err_t csi_tx_init(void)
         return ret;
     }
 
-    /* Start TX task on Core 0 (WiFi core) */
+    /* Start TX task on Core 1 — keeps it off Core 0 where the WiFi task
+     * (priority 23) would otherwise starve this priority-5 task.
+     * esp_now_send() is thread-safe and works from any core. */
     BaseType_t xret = xTaskCreatePinnedToCore(
-        csi_tx_task, "csi_tx", 4096, NULL, 5, NULL, 0);
+        csi_tx_task, "csi_tx", 4096, NULL, 5, NULL, 1);
     if (xret != pdPASS) {
         ESP_LOGE(TAG, "Failed to create TX task");
         return ESP_ERR_NO_MEM;
+    }
+
+    /* Stats task on Core 1 */
+    xret = xTaskCreatePinnedToCore(
+        tx_stats_task, "tx_stats", 2048, NULL, 1, NULL, 1);
+    if (xret != pdPASS) {
+        ESP_LOGW(TAG, "Failed to create stats task (non-fatal)");
     }
 
     return ESP_OK;

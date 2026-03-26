@@ -46,6 +46,10 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_count = 0;
         s_connected = true;
+
+        /* Re-enforce power save off after every (re)association */
+        esp_wifi_set_ps(WIFI_PS_NONE);
+
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
